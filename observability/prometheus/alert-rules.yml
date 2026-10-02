@@ -1,0 +1,18 @@
+groups:
+  - name: AIOpsAlerts
+    rules:
+      - alert: HighErrorRate
+        expr: rate(inference_errors_total[1m]) > 0.05
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: High Error Rate in Inference Service
+
+      - alert: HighLatency
+        expr: rate(inference_latency_seconds_sum[1m]) / rate(inference_latency_seconds_count[1m]) > 0.5
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: Latency Spike in Inference Service

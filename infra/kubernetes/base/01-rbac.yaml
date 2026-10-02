@@ -1,0 +1,46 @@
+# This is the piece that was actually missing before: remediation-service's
+# code (k8s_executor.py) can call the Kubernetes API correctly, but a pod
+# has NO permissions by default. Without this RBAC, flipping
+# ENABLE_KUBERNETES_REMEDIATION=true just gets you 403 Forbidden on every
+# call. This grants exactly what restart_deployment / scale_deployment /
+# rollback_deployment / delete_pod / restart_pod need -- least privilege,
+# scoped to this namespace only, no cluster-wide access.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: remediation-service
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: remediation-executor
+rules:
+  # restart_deployment / scale_deployment / rollback_deployment
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "patch", "update"]
+  # rollback_deployment reads ReplicaSet revision history to find the
+  # previous template to roll back to
+  - apiGroups: ["apps"]
+    resources: ["replicasets"]
+    verbs: ["get", "list", "watch"]
+  # delete_pod / restart_pod / health inspection
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch", "delete"]
+  # read-only: needed to resolve a Deployment's live pods for health checks
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: remediation-executor-binding
+subjects:
+  - kind: ServiceAccount
+    name: remediation-service
+roleRef:
+  kind: Role
+  name: remediation-executor
+  apiGroup: rbac.authorization.k8s.io

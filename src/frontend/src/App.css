@@ -1,0 +1,294 @@
+/* ==========================================================
+   AUTH PAGES (Login / Register)
+   Same token system as index.css -- graphite + signal amber,
+   no glassmorphism blur, no gradient-fill icon box, no glow.
+   Font tokens come from index.css's @import; this file only
+   needs the color/shape decisions specific to the auth screens.
+   ========================================================== */
+:root {
+  color: #e5e7eb;
+  background: #0c0e12;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+button, input { font: inherit; }
+
+.auth-page {
+  min-height: 100vh;
+  background: #0c0e12;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 40px 20px;
+  position: relative;
+  overflow: hidden;
+}
+
+.auth-background {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.grid-overlay {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: linear-gradient(to bottom, black, transparent 85%);
+}
+
+.auth-container {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 32px;
+}
+
+.brand-icon {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: #15181e;
+  border: 1px solid #262b34;
+  color: #e2a33d;
+  font-size: 18px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-weight: 600;
+}
+
+.brand h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+}
+
+.brand span {
+  display: block;
+  margin-top: 3px;
+  color: #8b93a3;
+  font-size: 11px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+.auth-card {
+  width: 100%;
+  padding: 32px;
+  background: #15181e;
+  border: 1px solid #262b34;
+  border-radius: 10px;
+}
+
+.auth-header { margin-bottom: 26px; }
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #5fb488;
+  margin-bottom: 16px;
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  color: #e2a33d;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+.auth-header h2 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.4px;
+}
+
+.auth-header > p:last-child {
+  margin: 8px 0 0;
+  color: #8b93a3;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.input-group { margin-bottom: 16px; }
+
+.input-group label {
+  display: block;
+  margin-bottom: 7px;
+  color: #b0b7c3;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.input-group input {
+  width: 100%;
+  height: 44px;
+  padding: 0 14px;
+  border: 1px solid #262b34;
+  border-radius: 6px;
+  background: #0c0e12;
+  color: #e5e7eb;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.input-group input::placeholder { color: #5b6270; }
+
+.input-group input:focus {
+  border-color: #e2a33d;
+}
+
+.auth-button {
+  width: 100%;
+  height: 46px;
+  margin-top: 4px;
+  border: none;
+  border-radius: 6px;
+  background: #e2a33d;
+  color: #0c0e12;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  transition: background 0.15s ease;
+}
+
+.auth-button:hover:not(:disabled) { background: #eeb75a; }
+.auth-button:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.secondary-button {
+  width: 100%;
+  height: 42px;
+  border: 1px solid #262b34;
+  border-radius: 6px;
+  background: transparent;
+  color: #b0b7c3;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.secondary-button:hover {
+  background: #1c2028;
+  border-color: #333947;
+}
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 22px 0 14px;
+  color: #5b6270;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 1.2px;
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+.auth-divider::before, .auth-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: #262b34;
+}
+
+.auth-error {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border: 1px solid rgba(211, 104, 95, 0.3);
+  border-radius: 6px;
+  background: rgba(211, 104, 95, 0.1);
+  color: #e79b94;
+  font-size: 12px;
+}
+
+.auth-error span {
+  width: 16px;
+  height: 16px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #d3685f;
+  color: #0c0e12;
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.security-footer {
+  margin-top: 18px;
+  color: #5b6270;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.auth-loading {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background: #0c0e12;
+  color: #8b93a3;
+}
+
+.loading-spinner, .button-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  border-top-color: #e2a33d;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+.loading-spinner { width: 30px; height: 30px; margin-bottom: 14px; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-spinner, .button-spinner { animation: none; }
+}
+
+@media (max-width: 520px) {
+  .auth-page { padding: 24px 15px; }
+  .auth-card { padding: 24px 20px; }
+  .auth-header h2 { font-size: 22px; }
+}

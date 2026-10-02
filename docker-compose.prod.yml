@@ -1,0 +1,405 @@
+# Production topology (Phase 2: hide infrastructure).
+# Standalone on purpose -- NOT an override merged with docker-compose.yml,
+# to avoid any ambiguity about Compose's list-merge behavior for `ports`.
+# Generated from docker-compose.yml: every internal service keeps its
+# build context/environment identical, minus host port publishes, plus
+# the `edge` (nginx) service as the only public entry point.
+#
+# Usage:
+#   docker compose -f docker-compose.prod.yml up -d --build
+#   -> http://localhost (or your domain once you point DNS + a real
+#      TLS-terminating LB/proxy at it -- see infra/nginx/nginx.conf)
+#
+# The plain `docker compose up` / docker-compose.yml dev workflow is
+# completely untouched by this file.
+
+
+name: aiops-platform
+services:
+  api-gateway:
+    container_name: api-gateway
+    build:
+      context: .
+      dockerfile: src/api-gateway/Dockerfile
+    restart: unless-stopped
+    env_file:
+    - .env
+    environment:
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
+      JWT_SECRET: ${JWT_SECRET}
+      AUTH_SERVICE_URL: ${AUTH_SERVICE_URL}
+      INFERENCE_SERVICE_URL: ${INFERENCE_SERVICE_URL}
+      RESULT_SERVICE_URL: ${RESULT_SERVICE_URL}
+      INCIDENT_SERVICE_URL: ${INCIDENT_SERVICE_URL}
+      REMEDIATION_SERVICE_URL: ${REMEDIATION_SERVICE_URL}
+      NOTIFICATION_SERVICE_URL: ${NOTIFICATION_SERVICE_URL}
+      INCIDENT_SERVICE_WS_URL: ${INCIDENT_SERVICE_WS_URL}
+    depends_on:
+      auth-service:
+        condition: service_started
+      inference-service:
+        condition: service_started
+      result-service:
+        condition: service_started
+      incident-service:
+        condition: service_healthy
+    networks:
+    - aiops-network
+    logging:
+      options:
+        max-size: 10m
+        max-file: '3'
+  auth-service:
+    container_name: auth-service
+    build:
+      context: .
+      dockerfile: src/auth-service/Dockerfile
+    restart: unless-stopped
+    env_file:
+    - .env
+    networks:
+    - aiops-network
+    healthcheck:
+      test:
+      - CMD
+      - python3
+      - -c
+      - import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health',
+        timeout=3).status==200 else 1)
+      interval: 30s
+      timeout: 5s
+      retries: 5
+  inference-service:
+    container_name: inference-service
+    build:
+      context: .
+      dockerfile: src/inference-service/Dockerfile
+    restart: unless-stopped
+    env_file:
+    - .env
+    environment:
+      REDIS_URL: ${REDIS_URL}
+    depends_on:
+      redis:
+        condition: service_started
+    networks:
+    - aiops-network
+    healthcheck:
+      test:
+      - CMD
+      - python3
+      - -c
+      - import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8001/health',
+        timeout=3).status==200 else 1)
+      interval: 30s
+      timeout: 5s
+      retries: 5
+  result-service:
+    container_name: result-service
+    build:
+      context: .
+      dockerfile: src/result-service/Dockerfile
+    restart: unless-stopped
+    env_file:
+    - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+    - aiops-network
+    healthcheck:
+      test:
+      - CMD
+      - python3
+      - -c
+      - import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8002/health',
+        timeout=3).status==200 else 1)
+      interval: 30s
+      timeout: 5s
+      retries: 5
+  incident-service:
+    container_name: incident-service
+    build:
+      context: .
+      dockerfile: src/incident-service/Dockerfile
+    restart: unless-stopped
+    env_file:
+    - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
+      NOTIFICATION_SERVICE_URL: ${NOTIFICATION_SERVICE_URL}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+    - aiops-network
+    healthcheck:
+      test:
+      - CMD
+      - python3
+      - -c
+      - import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8003/health',
+        timeout=3).status==200 else 1)
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
+    logging:
+      options:
+        max-size: 10m
+        max-file: '3'
+  remediation-service:
+    container_name: remediation-service
+    build:
+      context: .
+      dockerfile: src/remediation-service/Dockerfile
+    restart: unless-stopped
+    env_file:
+    - .env
+    environment:
+      INCIDENT_SERVICE_URL: ${INCIDENT_SERVICE_URL}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
+      JWT_SECRET: ${JWT_SECRET}
+      VERIFICATION_WAIT_SECONDS: ${VERIFICATION_WAIT_SECONDS}
+      VERIFICATION_MAX_RETRIES: ${VERIFICATION_MAX_RETRIES}
+      VERIFICATION_RETRY_INTERVAL_SECONDS: ${VERIFICATION_RETRY_INTERVAL_SECONDS}
+      KUBECONFIG: ${KUBECONFIG}
+    volumes:
+    - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      incident-service:
+        condition: service_healthy
+    networks:
+    - aiops-network
+    healthcheck:
+      test:
+      - CMD
+      - python3
+      - -c
+      - import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8004/health',
+        timeout=3).status==200 else 1)
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
+    logging:
+      options:
+        max-size: 10m
+        max-file: '3'
+  notification-service:
+    container_name: notification-service
+    build:
+      context: .
+      dockerfile: src/notification-service/Dockerfile
+    restart: unless-stopped
+    env_file:
+    - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL}
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL}
+      TEAMS_WEBHOOK_URL: ${TEAMS_WEBHOOK_URL}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      NOTIFY_EMAIL_FROM: ${NOTIFY_EMAIL_FROM}
+      NOTIFY_EMAIL_TO: ${NOTIFY_EMAIL_TO}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+    - aiops-network
+    healthcheck:
+      test:
+      - CMD
+      - python3
+      - -c
+      - import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8005/health',
+        timeout=3).status==200 else 1)
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+    logging:
+      options:
+        max-size: 10m
+        max-file: '3'
+  aiops-engine:
+    container_name: aiops-engine
+    build:
+      context: .
+      dockerfile: src/aiops-engine/Dockerfile
+    restart: unless-stopped
+    env_file:
+    - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      PROMETHEUS_URL: ${PROMETHEUS_URL}
+      INCIDENT_SERVICE_URL: ${INCIDENT_SERVICE_URL}
+      REMEDIATION_SERVICE_URL: ${REMEDIATION_SERVICE_URL}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
+      MONITORED_SERVICES: ${MONITORED_SERVICES}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      prometheus:
+        condition: service_started
+      incident-service:
+        condition: service_healthy
+      remediation-service:
+        condition: service_healthy
+    networks:
+    - aiops-network
+  postgres:
+    container_name: postgres
+    image: postgres:15-alpine
+    restart: unless-stopped
+    env_file:
+    - .env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+    - postgres_data:/var/lib/postgresql/data
+    networks:
+    - aiops-network
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  redis:
+    container_name: redis
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+    - redis_data:/data
+    networks:
+    - aiops-network
+  prometheus:
+    container_name: prometheus
+    image: prom/prometheus:v2.47.2
+    restart: unless-stopped
+    volumes:
+    - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    - ./observability/prometheus/alert-rules.yml:/etc/prometheus/alert-rules.yml
+    depends_on:
+    - cadvisor
+    - node-exporter
+    networks:
+    - aiops-network
+  cadvisor:
+    container_name: cadvisor
+    image: gcr.io/cadvisor/cadvisor:v0.47.2
+    restart: unless-stopped
+    volumes:
+    - /:/rootfs:ro
+    - /var/run:/var/run:ro
+    - /sys:/sys:ro
+    - /var/lib/docker/:/var/lib/docker:ro
+    - /dev/disk/:/dev/disk:ro
+    devices:
+    - /dev/kmsg
+    networks:
+    - aiops-network
+  node-exporter:
+    container_name: node-exporter
+    image: prom/node-exporter:v1.7.0
+    restart: unless-stopped
+    volumes:
+    - /proc:/host/proc:ro
+    - /sys:/host/sys:ro
+    - /:/rootfs:ro
+    command:
+    - --path.procfs=/host/proc
+    - --path.sysfs=/host/sys
+    - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)
+    networks:
+    - aiops-network
+  loki:
+    container_name: loki
+    image: grafana/loki:2.9.2
+    restart: unless-stopped
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+    - ./observability/loki/loki-config.yml:/etc/loki/local-config.yaml
+    networks:
+    - aiops-network
+  promtail:
+    container_name: promtail
+    image: grafana/promtail:2.9.2
+    restart: unless-stopped
+    command: -config.file=/etc/promtail/config.yml
+    volumes:
+    - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    - /var/run/docker.sock:/var/run/docker.sock:ro
+    - ./observability/promtail/promtail-config.yml:/etc/promtail/config.yml
+    depends_on:
+    - loki
+    networks:
+    - aiops-network
+  grafana:
+    container_name: grafana
+    image: grafana/grafana:10.2.2
+    restart: unless-stopped
+    env_file:
+    - .env
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+    volumes:
+    - grafana_data:/var/lib/grafana
+    - ./observability/grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+    - prometheus
+    - loki
+    networks:
+    - aiops-network
+  edge:
+    container_name: edge
+    build:
+      context: .
+      dockerfile: infra/nginx/Dockerfile
+      args:
+        VITE_API_URL: ${EDGE_PUBLIC_API_URL:-/gateway}
+    restart: unless-stopped
+    ports:
+    - 80:80
+    depends_on:
+      api-gateway:
+        condition: service_started
+    networks:
+    - aiops-network
+networks:
+  aiops-network:
+    driver: bridge
+volumes:
+  postgres_data: null
+  redis_data: null
+  grafana_data: null

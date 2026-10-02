@@ -1,0 +1,308 @@
+# Every backend service follows the same shape: envFrom the shared
+# ConfigMap/Secret (03-app-services rides on top of what 00-configmap-secret
+# already defines -- one source of truth, not copy-pasted env blocks),
+# liveness/readiness against the same /health endpoint the Docker Compose
+# healthchecks already use, and requests/limits sized for a small
+# kind/minikube node (this is a research testbed, not a production fleet).
+#
+# Images are built locally and loaded into the cluster -- see
+# docs/how-to-run.md's Kubernetes section for the exact
+# `docker build` + `kind load docker-image` sequence. imagePullPolicy is
+# IfNotPresent everywhere so a local image is used as-is instead of the
+# kubelet trying (and failing) to pull it from a registry.
+
+# ---------------------------------------------------------------------
+# auth-service
+# ---------------------------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-service
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: auth-service } }
+  template:
+    metadata: { labels: { app: auth-service } }
+    spec:
+      containers:
+        - name: auth-service
+          image: aiops-platform-auth-service:latest
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 8000 }]
+          envFrom:
+            - configMapRef: { name: platform-config }
+            - secretRef: { name: platform-secrets }
+          readinessProbe: { httpGet: { path: /health, port: 8000 }, initialDelaySeconds: 5, periodSeconds: 10 }
+          livenessProbe: { httpGet: { path: /health, port: 8000 }, initialDelaySeconds: 15, periodSeconds: 20 }
+          resources: { requests: { cpu: "50m", memory: "64Mi" }, limits: { cpu: "250m", memory: "256Mi" } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: auth-service }
+spec:
+  selector: { app: auth-service }
+  ports: [{ port: 8000, targetPort: 8000 }]
+
+# ---------------------------------------------------------------------
+# inference-service
+# ---------------------------------------------------------------------
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inference-service
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: inference-service } }
+  template:
+    metadata: { labels: { app: inference-service } }
+    spec:
+      containers:
+        - name: inference-service
+          image: aiops-platform-inference-service:latest
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 8001 }]
+          envFrom:
+            - configMapRef: { name: platform-config }
+            - secretRef: { name: platform-secrets }
+          readinessProbe: { httpGet: { path: /health, port: 8001 }, initialDelaySeconds: 5, periodSeconds: 10 }
+          livenessProbe: { httpGet: { path: /health, port: 8001 }, initialDelaySeconds: 15, periodSeconds: 20 }
+          resources: { requests: { cpu: "100m", memory: "128Mi" }, limits: { cpu: "500m", memory: "512Mi" } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: inference-service }
+spec:
+  selector: { app: inference-service }
+  ports: [{ port: 8001, targetPort: 8001 }]
+
+# ---------------------------------------------------------------------
+# result-service
+# ---------------------------------------------------------------------
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: result-service
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: result-service } }
+  template:
+    metadata: { labels: { app: result-service } }
+    spec:
+      containers:
+        - name: result-service
+          image: aiops-platform-result-service:latest
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 8002 }]
+          envFrom:
+            - configMapRef: { name: platform-config }
+            - secretRef: { name: platform-secrets }
+          readinessProbe: { httpGet: { path: /health, port: 8002 }, initialDelaySeconds: 5, periodSeconds: 10 }
+          livenessProbe: { httpGet: { path: /health, port: 8002 }, initialDelaySeconds: 15, periodSeconds: 20 }
+          resources: { requests: { cpu: "50m", memory: "64Mi" }, limits: { cpu: "250m", memory: "256Mi" } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: result-service }
+spec:
+  selector: { app: result-service }
+  ports: [{ port: 8002, targetPort: 8002 }]
+
+# ---------------------------------------------------------------------
+# incident-service
+# ---------------------------------------------------------------------
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: incident-service
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: incident-service } }
+  template:
+    metadata: { labels: { app: incident-service } }
+    spec:
+      containers:
+        - name: incident-service
+          image: aiops-platform-incident-service:latest
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 8003 }]
+          envFrom:
+            - configMapRef: { name: platform-config }
+            - secretRef: { name: platform-secrets }
+          readinessProbe: { httpGet: { path: /health, port: 8003 }, initialDelaySeconds: 5, periodSeconds: 10 }
+          livenessProbe: { httpGet: { path: /health, port: 8003 }, initialDelaySeconds: 15, periodSeconds: 20 }
+          resources: { requests: { cpu: "50m", memory: "128Mi" }, limits: { cpu: "250m", memory: "384Mi" } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: incident-service }
+spec:
+  selector: { app: incident-service }
+  ports: [{ port: 8003, targetPort: 8003 }]
+
+# ---------------------------------------------------------------------
+# remediation-service -- the only workload that gets the RBAC-scoped
+# service account from 01-rbac.yaml. No Docker socket mount here (unlike
+# docker-compose) -- in-cluster, it authenticates to the Kubernetes API
+# via its service account token instead, which k8s_executor.py already
+# picks up automatically through load_incluster_config().
+# ---------------------------------------------------------------------
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: remediation-service
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: remediation-service } }
+  template:
+    metadata: { labels: { app: remediation-service } }
+    spec:
+      serviceAccountName: remediation-service
+      containers:
+        - name: remediation-service
+          image: aiops-platform-remediation-service:latest
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 8004 }]
+          envFrom:
+            - configMapRef: { name: platform-config }
+            - secretRef: { name: platform-secrets }
+          readinessProbe: { httpGet: { path: /health, port: 8004 }, initialDelaySeconds: 5, periodSeconds: 10 }
+          livenessProbe: { httpGet: { path: /health, port: 8004 }, initialDelaySeconds: 15, periodSeconds: 20 }
+          resources: { requests: { cpu: "50m", memory: "64Mi" }, limits: { cpu: "250m", memory: "256Mi" } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: remediation-service }
+spec:
+  selector: { app: remediation-service }
+  ports: [{ port: 8004, targetPort: 8004 }]
+
+# ---------------------------------------------------------------------
+# notification-service
+# ---------------------------------------------------------------------
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-service
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: notification-service } }
+  template:
+    metadata: { labels: { app: notification-service } }
+    spec:
+      containers:
+        - name: notification-service
+          image: aiops-platform-notification-service:latest
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 8005 }]
+          envFrom:
+            - configMapRef: { name: platform-config }
+            - secretRef: { name: platform-secrets }
+          readinessProbe: { httpGet: { path: /health, port: 8005 }, initialDelaySeconds: 5, periodSeconds: 10 }
+          livenessProbe: { httpGet: { path: /health, port: 8005 }, initialDelaySeconds: 15, periodSeconds: 20 }
+          resources: { requests: { cpu: "50m", memory: "64Mi" }, limits: { cpu: "250m", memory: "256Mi" } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: notification-service }
+spec:
+  selector: { app: notification-service }
+  ports: [{ port: 8005, targetPort: 8005 }]
+
+# ---------------------------------------------------------------------
+# aiops-engine -- background orchestrator, no inbound traffic, so no
+# Service/probe: it doesn't run an HTTP server, it's a polling loop that
+# calls out to Prometheus/incident-service/remediation-service.
+# ---------------------------------------------------------------------
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aiops-engine
+spec:
+  replicas: 1 # singleton by design -- two copies would double-fire remediation for the same incident
+  strategy: { type: Recreate } # never run two copies mid-rollout, for the same reason
+  selector: { matchLabels: { app: aiops-engine } }
+  template:
+    metadata: { labels: { app: aiops-engine } }
+    spec:
+      containers:
+        - name: aiops-engine
+          image: aiops-platform-aiops-engine:latest
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef: { name: platform-config }
+            - secretRef: { name: platform-secrets }
+          resources: { requests: { cpu: "100m", memory: "128Mi" }, limits: { cpu: "500m", memory: "512Mi" } }
+
+# ---------------------------------------------------------------------
+# api-gateway
+# ---------------------------------------------------------------------
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: api-gateway } }
+  template:
+    metadata: { labels: { app: api-gateway } }
+    spec:
+      containers:
+        - name: api-gateway
+          image: aiops-platform-api-gateway:latest
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 8080 }]
+          envFrom:
+            - configMapRef: { name: platform-config }
+            - secretRef: { name: platform-secrets }
+          readinessProbe: { httpGet: { path: /health, port: 8080 }, initialDelaySeconds: 5, periodSeconds: 10 }
+          livenessProbe: { httpGet: { path: /health, port: 8080 }, initialDelaySeconds: 15, periodSeconds: 20 }
+          resources: { requests: { cpu: "50m", memory: "64Mi" }, limits: { cpu: "250m", memory: "256Mi" } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: api-gateway }
+spec:
+  selector: { app: api-gateway }
+  ports: [{ port: 8080, targetPort: 8080 }]
+
+# ---------------------------------------------------------------------
+# edge -- the production frontend build (infra/nginx/Dockerfile: Vite
+# built for real, served + reverse-proxied by nginx), NOT the dev-server
+# image docker-compose.yml uses. This is the only thing meant to be
+# reachable from outside the cluster -- see docs/how-to-run.md for
+# `kubectl port-forward svc/edge` (local/reproducible) vs. an Ingress
+# (real domain + TLS, optional, not required to run the experiments).
+# ---------------------------------------------------------------------
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: edge
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: edge } }
+  template:
+    metadata: { labels: { app: edge } }
+    spec:
+      containers:
+        - name: edge
+          image: aiops-platform-edge:latest
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 80 }]
+          readinessProbe: { httpGet: { path: /, port: 80 }, initialDelaySeconds: 3, periodSeconds: 10 }
+          resources: { requests: { cpu: "20m", memory: "32Mi" }, limits: { cpu: "100m", memory: "128Mi" } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: edge }
+spec:
+  type: ClusterIP
+  selector: { app: edge }
+  ports: [{ port: 80, targetPort: 80 }]

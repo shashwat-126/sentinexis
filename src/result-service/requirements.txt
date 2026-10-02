@@ -1,0 +1,6 @@
+fastapi[all]==0.104.1
+PyJWT==2.8.0
+SQLAlchemy==2.0.23
+psycopg2-binary==2.9.9
+prometheus-fastapi-instrumentator==6.1.0
+redis==5.0.1
